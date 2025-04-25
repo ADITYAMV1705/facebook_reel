@@ -11,10 +11,10 @@ st.title("📥 Facebook & Instagram Reel/Video Downloader")
 st.write("Easily download **public** reels/videos from Facebook or Instagram! 🚀")
 
 # Tabs for Facebook and Instagram
-tab1, tab2 = st.tabs(["📸 Instagram", "📘 Facebook"])
+tab1, tab2 = st.tabs(["📘 Facebook", "📸 Instagram"])
 
 # --- Instagram Reel Downloader ---
-with tab1:
+with tab2:
 
     import requests
 
@@ -83,7 +83,7 @@ with tab1:
             st.warning("⚠️ Please enter a valid Instagram Reel URL.")
 
 # --- Facebook Video Downloader ---
-with tab2:
+with tab1:
     st.header("Facebook Reel/Video Downloader")
 
     fb_url = st.text_input("🔗 Enter Facebook Video URL:")
