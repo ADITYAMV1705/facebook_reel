@@ -1,103 +1,144 @@
 import streamlit as st
-import yt_dlp
-import re
-from datetime import datetime
-import tempfile
 import os
-import shutil  # For more robust file operations
+import yt_dlp
+import instaloader
+import uuid
+import streamlit.components.v1 as components
 
-# App title and description
-st.set_page_config(page_title="Facebook Reel Downloader", page_icon="📽️")
-st.title("📽️ Facebook Reel Downloader")
-st.markdown("Download any Facebook Reel video by entering its URL below.")
+# App Title
+st.set_page_config(page_title="📥 Reel/Video Downloader", page_icon="🎬", layout="centered")
+st.title("📥 Facebook & Instagram Reel/Video Downloader")
+st.write("Easily download **public** reels/videos from Facebook or Instagram! 🚀")
 
-# Helper functions
-def sanitize_filename(filename):
-    """Remove invalid characters from filename"""
-    filename = re.sub(r'[\\/*?:"<>|]', '_', filename)
-    filename = filename.encode('ascii', 'ignore').decode('ascii')
-    return filename.strip()[:100]
+# Tabs for Facebook and Instagram
+tab1, tab2 = st.tabs(["📸 Instagram", "📘 Facebook"])
 
-def is_valid_facebook_reel_url(url):
-    """Check if URL is valid Facebook Reel URL"""
-    facebook_reel_pattern = r'(https?:\/\/(?:www\.|m\.)?facebook\.com\/reel\/\S+)'
-    return re.match(facebook_reel_pattern, url) is not None
+# --- Instagram Reel Downloader ---
+with tab1:
 
-def fetch_reel_data(reel_url):
-    """Download Facebook reel data into bytes and return filename"""
-    try:
-        ydl_opts = {
-            'format': 'best[ext=mp4]',
-            'outtmpl': '%(title)s_%(id)s.%(ext)s',
-            'quiet': True,
-            'no_warnings': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(reel_url, download=False)
-            title = sanitize_filename(info_dict.get('title', 'facebook_reel'))
-            video_id = info_dict.get('id')
-            ext = info_dict.get('ext', 'mp4')
-            filename = f"{title}_{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    import requests
 
-            # Create a temporary directory within the current working directory
-            app_temp_dir = os.path.join(os.getcwd(), "app_temp")
-            os.makedirs(app_temp_dir, exist_ok=True)
-            temp_file_path = os.path.join(app_temp_dir, "temp_reel.mp4")
+    # Inside your Instagram tab:
+    st.header("Instagram Reel Downloader")
 
-            ydl_opts_download = {
-                'format': 'best[ext=mp4]',
-                'outtmpl': temp_file_path,
-                'quiet': True,
-                'no_warnings': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts_download) as ydl_dl:
-                ydl_dl.download([reel_url])
-                with open(temp_file_path, 'rb') as f:
-                    video_bytes = f.read()
+    reel_url = st.text_input("🔗 Enter Instagram Reel URL:")
 
-            # Clean up the temporary file and directory
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-            if os.path.exists(app_temp_dir) and not os.listdir(app_temp_dir):
-                os.rmdir(app_temp_dir)
+    if st.button("Check & Preview Reel", key="insta_btn"):
+        if reel_url:
+            try:
+                st.info("Processing your request... ⏳")
 
-            return {
-                'status': 'success',
-                'data': video_bytes,
-                'filename': filename,
-                'title': title
-            }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+                # Extract shortcode
+                shortcode = reel_url.strip().split("/")[-2]
 
-# Main app interface
-url = st.text_input("Enter Facebook Reel URL:", placeholder="https://www.facebook.com/reel/...")
+                # Setup Instaloader
+                loader = instaloader.Instaloader()
 
-if st.button("Download Video"):
-    if not url:
-        st.warning("Please enter a URL.")
-    elif not is_valid_facebook_reel_url(url):
-        st.error("Invalid Facebook Reel URL. Please check the format.")
-    else:
-        with st.spinner("Fetching and preparing video..."):
-            result = fetch_reel_data(url)
+                # Load the post
+                post = instaloader.Post.from_shortcode(loader.context, shortcode)
 
-            if result['status'] == 'success':
-                st.success("✅ Download ready!")
+                # Check privacy
+                if post.owner_profile.is_private:
+                    st.warning("⚠️ This reel is from a **private account**. Cannot preview or download it.")
+                else:
+                    st.success("✅ This reel is from a public account. Preview below:")
 
-                st.download_button(
-                    label="⬇️ Click to Download",
-                    data=result['data'],
-                    file_name=result['filename'],
-                    mime="video/mp4",
-                    key=f"download_button_{result['filename']}"
-                )
+                    # Download the video using requests
+                    download_id = str(uuid.uuid4())
+                    output_dir = f"downloads/{download_id}"
+                    os.makedirs(output_dir, exist_ok=True)
 
-                st.info(
-                    "📱 The download should start automatically. Check your browser's Downloads folder."
-                )
-            else:
-                st.error(f"❌ Download failed: {result['message']}")
+                    video_path = os.path.join(output_dir, "reel.mp4")
+                    response = requests.get(post.video_url)
+                    with open(video_path, "wb") as f:
+                        f.write(response.content)
+
+                    # 🎥 Centered video preview
+                    with open(video_path, "rb") as file:
+                        video_data = file.read()
+                        st.markdown(
+                            "<div style='display: flex; justify-content: center;'>",
+                            unsafe_allow_html=True
+                        )
+                        st.video(video_data)
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    # 🎬 Proper download button
+                    with open(video_path, "rb") as file:
+                        st.markdown(
+                            "<div style='display: flex; justify-content: center; margin-top: 20px;'>",
+                            unsafe_allow_html=True
+                        )
+                        st.download_button(
+                            label="⬇️ Download Reel Video",
+                            data=file,
+                            file_name="reel.mp4",
+                            mime="video/mp4",
+                        )
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"😣 Oops! Something went wrong: {e}")
+        else:
+            st.warning("⚠️ Please enter a valid Instagram Reel URL.")
+
+# --- Facebook Video Downloader ---
+with tab2:
+    st.header("Facebook Reel/Video Downloader")
+
+    fb_url = st.text_input("🔗 Enter Facebook Video URL:")
+
+    if st.button("Fetch & Preview", key="fb_btn"):
+        if fb_url:
+            try:
+                st.info("Fetching the Facebook video... ⏳")
+
+                # Create a unique download folder
+                download_id = str(uuid.uuid4())
+                output_dir = f"downloads/{download_id}"
+                os.makedirs(output_dir, exist_ok=True)
+
+                # Setup yt_dlp options
+                ydl_opts = {
+                    'format': 'best',
+                    'outtmpl': f'{output_dir}/video.%(ext)s',
+                    'quiet': True,
+                }
+
+                # Download with yt_dlp
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(fb_url, download=True)
+                    video_title = info.get("title", "Facebook Video")
+                    video_file = ydl.prepare_filename(info)
+
+                # ✅ Video fetched successfully
+                st.success("✅ Video fetched successfully!")
+
+                # 🎥 Centered video preview
+                with open(video_file, "rb") as file:
+                    video_data = file.read()
+                    st.markdown(
+                        "<div style='display: flex; justify-content: center;'>",
+                        unsafe_allow_html=True
+                    )
+                    st.video(video_data)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                # 🎬 Centered download button
+                with open(video_file, "rb") as file:
+                    st.markdown(
+                        "<div style='display: flex; justify-content: center; margin-top: 20px;'>",
+                        unsafe_allow_html=True
+                    )
+                    st.download_button(
+                        label="⬇️ Download Video",
+                        data=file,
+                        file_name=os.path.basename(video_file),
+                        mime="video/mp4",
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"😢 Failed to download video: {e}")
+        else:
+            st.warning("⚠️ Please enter a valid Facebook video URL.")
